@@ -205,3 +205,10 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# second-brain runtime data
+data/cookies.txt
+data/wiki/
+data/output/
+data/raw/
+.venv/
