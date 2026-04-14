@@ -79,12 +79,41 @@ def ingest_list(file: str) -> None:
 
 @main.command()
 @click.argument("question")
-def query_cmd(question: str) -> None:
+@click.option("--no-file", is_flag=True, default=False, help="Don't file the answer back into the wiki.")
+def query_cmd(question: str, no_file: bool) -> None:
     """Ask a question against the wiki."""
-    click.echo(query.answer(question))
+    click.echo(query.answer(question, file_back=not no_file))
 
 
 main.add_command(query_cmd, name="query")
+
+
+@main.command()
+@click.option("--view", is_flag=True, default=False, help="Open interactive graph visualization in the browser.")
+def graph(view: bool) -> None:
+    """Analyze the knowledge graph: centrality, gaps, research questions."""
+    from .graph import analyze, visualize
+    click.echo(analyze())
+    if view:
+        import webbrowser
+        try:
+            path = visualize()
+            url = f"file://{path.resolve()}"
+            click.echo(f"\nGraph saved → {path}")
+            webbrowser.open(url)
+        except Exception as e:
+            click.echo(f"\nVisualization failed: {e}", err=True)
+
+
+@main.command()
+@click.option("--host", default="0.0.0.0", show_default=True, help="Bind address.")
+@click.option("--port", default=8000, show_default=True, type=int, help="Port to listen on.")
+@click.option("--reload", is_flag=True, default=False, help="Auto-reload on code changes (dev only).")
+def serve(host: str, port: int, reload: bool) -> None:
+    """Start the FastAPI API server."""
+    import uvicorn
+    click.echo(f"Starting Second Brain API on http://{host}:{port}  (docs: /docs)")
+    uvicorn.run("second_brain.api.main:app", host=host, port=port, reload=reload)
 
 
 @main.command()

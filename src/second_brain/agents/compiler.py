@@ -1,6 +1,7 @@
 import json
 
 from ..config import MODEL, MAX_SOURCE_CHARS
+from ..graph import extract_triples
 from ..llm import get_client
 from ..wiki import ensure_dirs, write_page, update_index, append_log, append_ideas
 
@@ -146,4 +147,13 @@ def ingest(source_content: str, source_name: str, current_index: str) -> list[st
         messages.extend(tool_results)
 
     append_log(f"ingest | {source_name} | {len(pages_written)} pages written")
+
+    if pages_written:
+        try:
+            n = extract_triples(pages_written)
+            if n:
+                append_log(f"graph | extracted {n} new triples from {source_name}")
+        except Exception:
+            pass  # graph extraction failure never blocks ingest
+
     return pages_written

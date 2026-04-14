@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import re
 
-from .config import WIKI_DIR, INDEX_FILE, LOG_FILE, IDEAS_FILE, OUTPUT_DIR
+from .config import WIKI_DIR, INDEX_FILE, LOG_FILE, IDEAS_FILE, OUTPUT_DIR, INFRANODUS_DIR, TODOS_DIR
 
 
 def ensure_dirs() -> None:
@@ -14,6 +14,8 @@ def ensure_dirs() -> None:
         WIKI_DIR / "qa",
         WIKI_DIR / "lint",
         OUTPUT_DIR,
+        INFRANODUS_DIR,
+        TODOS_DIR,
     ]:
         d.mkdir(parents=True, exist_ok=True)
 
@@ -40,14 +42,54 @@ def write_page(page_type: str, title: str, content: str) -> Path:
     return path
 
 
+_SECTION_HEADERS: dict[str, str] = {
+    "summary": "## Summaries",
+    "concept": "## Concepts",
+    "connection": "## Connections",
+    "insight": "## Insights",
+    "qa": "## Q&A",
+    "lint": "## Lint",
+}
+
+
 def update_index(title: str, page_type: str, summary: str, path: Path) -> None:
-    index = INDEX_FILE.read_text()
-    rel = str(path.relative_to(WIKI_DIR))  # e.g. "summary/foo.md" — relative to vault root
-    entry = f"- [[{rel}|{title}]] `{page_type}` — {summary}\n"
+    index_text = INDEX_FILE.read_text()
+    rel = str(path.relative_to(WIKI_DIR))  # e.g. "summary/foo.md"
+    entry = f"- [[{rel}|{title}]] `{page_type}` — {summary}"
+
+    section_header = _SECTION_HEADERS.get(page_type, f"## {page_type.title()}")
 
     # Remove stale entry for this title
-    lines = [l for l in index.splitlines(keepends=True) if f"|{title}]]" not in l]
-    INDEX_FILE.write_text("".join(lines) + entry)
+    lines = [l for l in index_text.splitlines() if f"|{title}]]" not in l]
+
+    # Locate the section
+    try:
+        sec_idx = lines.index(section_header)
+    except ValueError:
+        sec_idx = None
+
+    if sec_idx is not None:
+        # Find start of next section (or end of file)
+        next_sec = len(lines)
+        for i in range(sec_idx + 1, len(lines)):
+            if lines[i].startswith("## "):
+                next_sec = i
+                break
+        # Insert after last non-blank line in this section
+        insert_at = next_sec
+        for i in range(next_sec - 1, sec_idx, -1):
+            if lines[i].strip():
+                insert_at = i + 1
+                break
+        lines.insert(insert_at, entry)
+    else:
+        # Section doesn't exist — append at end
+        if lines and lines[-1] != "":
+            lines.append("")
+        lines.append(section_header)
+        lines.append(entry)
+
+    INDEX_FILE.write_text("\n".join(lines) + "\n")
 
 
 def append_log(entry: str) -> None:

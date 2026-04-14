@@ -17,6 +17,11 @@ IDEAS_FILE = OUTPUT_DIR / "ideas.md"
 
 ISSUES_FILE = ROOT / "ISSUES.md"
 
+INFRANODUS_DIR = DATA_DIR / "infranodus"
+ONTOLOGY_FILE = INFRANODUS_DIR / "wiki-ontology.md"
+TODOS_DIR = DATA_DIR / "todos"
+GAPS_FILE = TODOS_DIR / "gaps.md"
+
 # TrueFoundry LLM gateway
 API_KEY: str = os.environ["TFY_API_KEY"]
 BASE_URL: str = os.environ["TFY_BASE_URL"]

@@ -7,6 +7,18 @@ import html2text
 
 JS_DETECTION_THRESHOLD = 300  # chars — below this we assume JS-rendered
 
+# Social media / login-walled domains — always route through Jina.ai reader
+_SOCIAL_DOMAINS = {
+    "linkedin.com",
+    "twitter.com",
+    "x.com",
+    "instagram.com",
+    "facebook.com",
+    "threads.net",
+    "reddit.com",
+    "tiktok.com",
+}
+
 
 def read_source(source: str) -> tuple[str, str]:
     """Return (content, source_name) for a local file path or URL."""
@@ -14,9 +26,12 @@ def read_source(source: str) -> tuple[str, str]:
         return _read_youtube(source)
 
     if source.startswith("http://") or source.startswith("https://"):
-        content = _fetch_url(source)
-        if len(content.strip()) < JS_DETECTION_THRESHOLD:
-            content = _read_js_doc(source)
+        if _is_social_media(source):
+            content = _read_social_post(source)
+        else:
+            content = _fetch_url(source)
+            if len(content.strip()) < JS_DETECTION_THRESHOLD:
+                content = _read_js_doc(source)
         return content, source
 
     path = Path(source)
@@ -27,6 +42,34 @@ def read_source(source: str) -> tuple[str, str]:
         return _read_pdf(path), path.name
 
     return path.read_text(encoding="utf-8", errors="replace"), path.name
+
+
+# ── Social media ─────────────────────────────────────────────────────────────
+
+def _is_social_media(url: str) -> bool:
+    domain = urlparse(url).netloc.lower()
+    return any(d in domain for d in _SOCIAL_DOMAINS)
+
+
+def _read_social_post(url: str) -> str:
+    """Fetch social media post content via Jina.ai's free reader API.
+
+    Jina.ai (r.jina.ai) renders JS, bypasses many paywalls, and returns
+    clean markdown — no API key required for basic usage.
+
+    Falls back to DuckDuckGo search if Jina returns too little content
+    (e.g. LinkedIn posts that require login).
+    """
+    jina_url = f"https://r.jina.ai/{url}"
+    try:
+        content = _fetch_url(jina_url)
+        if len(content.strip()) > JS_DETECTION_THRESHOLD:
+            return content
+    except Exception:
+        pass
+
+    # Jina couldn't get enough content (login-walled) — try DuckDuckGo
+    return _read_js_doc(url)
 
 
 # ── YouTube ──────────────────────────────────────────────────────────────────

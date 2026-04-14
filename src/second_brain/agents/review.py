@@ -12,6 +12,10 @@ Perform a health check and produce a clear lint report covering:
 4. Missing [[wikilinks]] that should exist
 5. Knowledge gaps — topics worth exploring next
 
+For each knowledge gap, include:
+**Gap**: [description of what's missing]
+**Search**: `[exact search query to paste into DuckDuckGo or Google]`
+
 Be specific: name the pages and the exact issues."""
 
 
