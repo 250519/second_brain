@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .routers import graph, ingest, query, wiki
+from .routers import graph, ingest, query, search, wiki
 
 
 @asynccontextmanager
@@ -48,10 +48,11 @@ def create_app() -> FastAPI:
         )
 
     # ── Routers ───────────────────────────────────────────────────────────────
-    app.include_router(ingest.router, prefix="/api/v1/ingest", tags=["Ingest"])
-    app.include_router(query.router,  prefix="/api/v1/query",  tags=["Query"])
-    app.include_router(wiki.router,   prefix="/api/v1/wiki",   tags=["Wiki"])
-    app.include_router(graph.router,  prefix="/api/v1/graph",  tags=["Graph"])
+    app.include_router(ingest.router,  prefix="/api/v1/ingest",  tags=["Ingest"])
+    app.include_router(query.router,   prefix="/api/v1/query",   tags=["Query"])
+    app.include_router(wiki.router,    prefix="/api/v1/wiki",    tags=["Wiki"])
+    app.include_router(graph.router,   prefix="/api/v1/graph",   tags=["Graph"])
+    app.include_router(search.router,  prefix="/api/v1/search",  tags=["Search"])
 
     # ── Health check ──────────────────────────────────────────────────────────
     @app.get("/health", tags=["Health"], summary="Service health check")

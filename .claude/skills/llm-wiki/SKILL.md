@@ -1,6 +1,17 @@
 ---
 name: llm-wiki
-description: Build a complete LLM-maintained personal knowledge wiki — a "second brain" where an LLM automatically compiles, cross-references, and maintains structured knowledge from any source you feed it. Use this skill whenever the user wants to: build a personal knowledge base, second brain, LLM wiki, or persistent wiki powered by an LLM; organize articles, PDFs, YouTube videos, or notes into a searchable interlinked wiki; implement the Karpathy LLM Wiki pattern; build a system where Claude automatically compiles knowledge from ingested sources; add a query layer over their reading/research. Trigger for any variant of "second brain", "personal wiki", "knowledge base", "LLM wiki", "organize my research", "ingest articles into a wiki", "I want to query my notes", or "build me a RAG system" (this is better than RAG — explain why and use this skill). Also trigger when the user asks about adding ingestion, query, or knowledge graph features to an existing project.
+description: >
+  Build a complete LLM-maintained personal knowledge wiki — a second brain where an LLM
+  automatically compiles, cross-references, and maintains structured knowledge from any source
+  you feed it. Use this skill whenever the user wants to build a personal knowledge base,
+  second brain, LLM wiki, or persistent wiki powered by an LLM; organize articles, PDFs,
+  YouTube videos, or notes into a searchable interlinked wiki; implement the Karpathy LLM Wiki
+  pattern; build a system where Claude automatically compiles knowledge from ingested sources;
+  or add a query layer over their reading/research. Trigger for any variant of "second brain",
+  "personal wiki", "knowledge base", "LLM wiki", "organize my research", "ingest articles into
+  a wiki", "I want to query my notes", or "build me a RAG system" (this is better than RAG).
+  Also trigger when the user asks about adding ingestion, query, or knowledge graph features
+  to an existing project.
 ---
 
 # LLM Wiki — Personal Knowledge OS

@@ -1,11 +1,29 @@
 """Query router — ask questions against the wiki."""
 
 from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import StreamingResponse
 
 from ...agents import query as query_agent
 from ..models import QueryRequest, QueryResponse
 
 router = APIRouter()
+
+
+@router.post("/stream")
+def query_stream(body: QueryRequest) -> StreamingResponse:
+    """
+    Stream an answer as Server-Sent Events.
+
+    Yields ``data: {"delta": "..."}`` chunks then ``data: [DONE]``.
+    """
+    return StreamingResponse(
+        query_agent.stream_answer(body.question, file_back=body.file_back),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("", response_model=QueryResponse)

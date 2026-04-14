@@ -1,0 +1,98 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Near-black with a whisper of warmth */
+  --color-surface-950: #0c0c0d;
+  --color-surface-900: #111112;
+  --color-surface-800: #181819;
+  --color-surface-700: #202022;
+  --color-surface-600: #2a2a2d;
+
+  --color-accent:       #7c3aed;
+  --color-accent-muted: #5b21b6;
+  --color-accent-light: #a78bfa;
+
+  /* Distinctive font stack — Syne for headings, Onest for body */
+  --font-display: "Syne", system-ui, sans-serif;
+  --font-sans:    "Onest", system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html { font-size: 15px; }
+
+body {
+  margin: 0;
+  background-color: #0c0c0d;
+  color: #ede9e3;   /* warm off-white — not pure white */
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100vh;
+  display: flex;
+}
+
+/* ── Display heading class ───────────────────────────────────────────── */
+.font-display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+/* ── Grain texture overlay on surfaces ──────────────────────────────── */
+.grain {
+  position: relative;
+}
+.grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px;
+}
+
+/* ── Page enter animation ────────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+.animate-fade-up {
+  animation: fadeUp 0.35s ease forwards;
+}
+.animate-fade-up-d1 { animation-delay: 0.05s; opacity: 0; animation-fill-mode: forwards; animation-duration: 0.35s; animation-name: fadeUp; animation-timing-function: ease; }
+.animate-fade-up-d2 { animation-delay: 0.10s; opacity: 0; animation-fill-mode: forwards; animation-duration: 0.35s; animation-name: fadeUp; animation-timing-function: ease; }
+.animate-fade-up-d3 { animation-delay: 0.15s; opacity: 0; animation-fill-mode: forwards; animation-duration: 0.35s; animation-name: fadeUp; animation-timing-function: ease; }
+.animate-fade-up-d4 { animation-delay: 0.20s; opacity: 0; animation-fill-mode: forwards; animation-duration: 0.35s; animation-name: fadeUp; animation-timing-function: ease; }
+
+/* ── Scrollbar ───────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2a2a2d; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #3a3a3e; }
+
+/* ── Syntax highlight ────────────────────────────────────────────────── */
+.hljs {
+  background: #181819 !important;
+  border-radius: 8px;
+  padding: 1rem !important;
+  font-family: var(--font-mono);
+}
+
+/* ── Stat number treatment ───────────────────────────────────────────── */
+.stat-number {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}

@@ -82,10 +82,111 @@ def ingest_list(file: str) -> None:
 @click.option("--no-file", is_flag=True, default=False, help="Don't file the answer back into the wiki.")
 def query_cmd(question: str, no_file: bool) -> None:
     """Ask a question against the wiki."""
-    click.echo(query.answer(question, file_back=not no_file))
+    result = query.answer(question, file_back=not no_file)
+    click.echo(result)
+
+    searches = _extract_search_suggestions(result)
+    if searches:
+        _web_search_followup(question, searches, file_back=not no_file)
 
 
 main.add_command(query_cmd, name="query")
+
+
+def _extract_search_suggestions(text: str) -> list[str]:
+    """Parse backtick-quoted queries from a '## To explore' section."""
+    match = re.search(r"##\s+To explore\n(.*?)(?:\n##|\Z)", text, re.DOTALL)
+    if not match:
+        return []
+    return re.findall(r"`([^`]+)`", match.group(1))
+
+
+def _web_search_followup(question: str, searches: list[str], file_back: bool = True) -> None:
+    """Interactive flow: search web → pick results to ingest → optionally re-run query."""
+    click.echo("\n" + "─" * 60)
+    click.echo("The wiki doesn't fully cover this. Options:")
+    click.echo("  [s] Search the web and pick results to ingest")
+    click.echo("  [u] Paste a URL to ingest directly")
+    click.echo("  [n] Skip")
+
+    choice = click.prompt("Choice", default="n").strip().lower()
+
+    if choice == "u":
+        url = click.prompt("URL to ingest").strip()
+        if url:
+            _ingest_url(url)
+            _maybe_requery(question, file_back)
+        return
+
+    if choice != "s":
+        return
+
+    # Run DuckDuckGo with the first suggested query
+    search_query = searches[0]
+    click.echo(f"\nSearching: {search_query}")
+    try:
+        from duckduckgo_search import DDGS
+        results = list(DDGS().text(search_query, max_results=5))
+    except Exception as e:
+        click.echo(f"Search failed: {e}")
+        return
+
+    if not results:
+        click.echo("No results found.")
+        return
+
+    click.echo("\nTop results:")
+    for i, r in enumerate(results, 1):
+        click.echo(f"  [{i}] {r.get('title', '?')}")
+        click.echo(f"      {r.get('href', '')}")
+
+    raw = click.prompt(
+        "\nIngest which? (comma-separated numbers, or Enter to skip)",
+        default="",
+    ).strip()
+
+    if not raw:
+        return
+
+    indices: list[int] = []
+    for part in raw.split(","):
+        try:
+            idx = int(part.strip()) - 1
+            if 0 <= idx < len(results):
+                indices.append(idx)
+        except ValueError:
+            pass
+
+    if not indices:
+        return
+
+    for idx in indices:
+        url = results[idx].get("href", "")
+        if url:
+            _ingest_url(url)
+
+    _maybe_requery(question, file_back)
+
+
+def _ingest_url(url: str) -> None:
+    from .agents import compiler as _compiler
+    from .reader import read_source
+    from .wiki import read_index as _read_index
+
+    click.echo(f"\nIngesting {url} ...")
+    try:
+        content, name = read_source(url)
+        pages = _compiler.ingest(content, name, _read_index())
+        click.echo(f"  ✓ {len(pages)} page(s) written")
+    except Exception as e:
+        click.echo(f"  ✗ {e}")
+
+
+def _maybe_requery(question: str, file_back: bool) -> None:
+    if not click.confirm("\nRe-run your question with the updated wiki?", default=True):
+        return
+    click.echo("\n" + "─" * 60)
+    click.echo(query.answer(question, file_back=file_back))
 
 
 @main.command()
