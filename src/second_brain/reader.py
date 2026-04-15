@@ -89,9 +89,14 @@ def _extract_video_id(url: str) -> str | None:
 
 
 def _read_youtube(url: str) -> tuple[str, str]:
+    import logging
+    log = logging.getLogger(__name__)
+
     video_id = _extract_video_id(url)
     if not video_id:
         raise ValueError(f"Could not extract video ID from: {url}")
+
+    errors: list[str] = []
 
     # ── Attempt 1: yt-dlp (works on cloud IPs — fetches subtitle CDN URLs) ───
     try:
@@ -99,8 +104,11 @@ def _read_youtube(url: str) -> tuple[str, str]:
         if text:
             content = f"# YouTube Transcript\n\nSource: {url}\n\n{text}"
             return content, f"youtube/{video_id}"
-    except Exception:
-        pass
+        else:
+            errors.append("yt-dlp: returned empty transcript")
+    except Exception as e:
+        errors.append(f"yt-dlp: {e}")
+        log.warning("yt-dlp transcript failed for %s: %s", video_id, e)
 
     # ── Attempt 2: YoutubeLoader / youtube_transcript_api (local/residential) ─
     try:
@@ -111,23 +119,19 @@ def _read_youtube(url: str) -> tuple[str, str]:
         if text.strip():
             content = f"# YouTube Transcript\n\nSource: {url}\n\n{text}"
             return content, f"youtube/{video_id}"
-    except Exception:
-        pass
-
-    # ── Attempt 4: raw page metadata (last resort) ────────────────────────────
-    try:
-        page = _fetch_url(f"https://www.youtube.com/watch?v={video_id}")
-        title_match = re.search(r'"title":"([^"]+)"', page)
-        title = title_match.group(1) if title_match else video_id
-        content = (
-            f"# YouTube Video: {title}\n\n"
-            f"Source: {url}\n\n"
-            f"**Note:** All transcript methods failed — only page metadata extracted.\n\n"
-            f"{page[:2000]}"
-        )
-        return content, f"youtube/{video_id}"
+        else:
+            errors.append("YoutubeLoader: returned empty transcript")
     except Exception as e:
-        raise RuntimeError(f"Could not fetch YouTube video {url}: {e}")
+        errors.append(f"YoutubeLoader: {e}")
+        log.warning("YoutubeLoader transcript failed for %s: %s", video_id, e)
+
+    # All transcript methods failed — raise with details so the job is marked failed
+    # (gives the caller a chance to surface the real error rather than silently returning empty)
+    error_summary = " | ".join(errors)
+    raise RuntimeError(
+        f"Could not fetch transcript for YouTube video {url}. "
+        f"Errors: {error_summary}"
+    )
 
 
 # ── JS-rendered docs fallback ─────────────────────────────────────────────────
@@ -192,6 +196,9 @@ def _fetch_ytdlp_transcript(video_id: str, url: str) -> str | None:
     def _subtitle_hook(d: dict) -> None:
         pass
 
+    import os
+    cookies_file = os.getenv("YOUTUBE_COOKIES_FILE", "")
+
     ydl_opts: dict = {
         "skip_download": True,
         "writesubtitles": True,
@@ -202,11 +209,10 @@ def _fetch_ytdlp_transcript(video_id: str, url: str) -> str | None:
         "no_warnings": True,
         "logger": _SubtitleLogger(),
         "progress_hooks": [_subtitle_hook],
-        # Write to a temp in-memory-like path
         "outtmpl": "/tmp/yt_%(id)s.%(ext)s",
     }
-
-    import os, glob
+    if cookies_file and Path(cookies_file).exists():
+        ydl_opts["cookiefile"] = cookies_file
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
