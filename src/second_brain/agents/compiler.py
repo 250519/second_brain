@@ -98,7 +98,18 @@ Call `update_ideas` with 2–3 concrete research questions this source opens up.
 - Use [[wikilinks]] throughout using exact page titles
 - Every page must begin with YAML frontmatter: `title`, `type`, `summary` (max 150 chars)
 - Flag contradictions inline: `> ⚠️ Contradiction: [old claim] vs [new claim (source)]`
-- Prefer depth over breadth: fewer, richer pages compound better than many thin ones"""
+- Prefer depth over breadth: fewer, richer pages compound better than many thin ones
+
+## Technical accuracy — commands, code, package names (CRITICAL)
+
+YouTube and video transcripts are **speech-to-text only** — they capture spoken words but miss everything shown on screen (terminals, editors, browser). This creates a trap: the speaker says "run the install command" but the exact command was only on screen, not spoken.
+
+**Rules:**
+- Only write a terminal command, package name, API call, or code snippet if it appears **verbatim** in the source text.
+- Do NOT infer, autocomplete, or reconstruct commands from context. If the transcript says "install the lmcp package" but gives no exact command, write: *"install lmcp (exact command not captured in transcript)"* — never a guessed command.
+- Do NOT assume package managers. A speaker saying "install it" does not tell you whether they used `pip`, `uv`, `npm`, `brew`, or anything else.
+- **Never put an uncertain command in a code block.** If you are not 100% sure the command is verbatim from the source, use plain prose instead: *"the presenter ran an install command for ol-mcp (exact syntax not captured)"*. A code block implies the reader can copy-paste it — do not create that false confidence.
+- When uncertain about any technical detail (version numbers, flag names, API endpoints, config keys), omit it rather than guess. A gap in the wiki is far less harmful than wrong information."""
 
 
 def ingest(source_content: str, source_name: str, current_index: str) -> list[str]:

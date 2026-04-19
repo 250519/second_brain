@@ -216,3 +216,11 @@ data/output/
 data/raw/
 .venv/
 .agents/
+
+# Google OAuth credentials — never commit these
+credentials.json
+token.json
+
+# YouTube cookies — contains login tokens, never commit
+cookies.txt
+youtube_cookies.txt

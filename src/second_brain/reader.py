@@ -89,49 +89,35 @@ def _extract_video_id(url: str) -> str | None:
 
 
 def _read_youtube(url: str) -> tuple[str, str]:
-    import logging
-    log = logging.getLogger(__name__)
+    """Fetch YouTube transcript via Supadata SDK.
+
+    Requires SUPADATA_API_KEY env var — sign up free at https://supadata.ai
+    """
+    import os
+    from supadata import Supadata, SupadataError
 
     video_id = _extract_video_id(url)
     if not video_id:
         raise ValueError(f"Could not extract video ID from: {url}")
 
-    errors: list[str] = []
+    api_key = os.environ.get("SUPADATA_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("SUPADATA_API_KEY env var is not set")
 
-    # ── Attempt 1: yt-dlp (works on cloud IPs — fetches subtitle CDN URLs) ───
+    client = Supadata(api_key=api_key)
     try:
-        text = _fetch_ytdlp_transcript(video_id, url)
-        if text:
-            content = f"# YouTube Transcript\n\nSource: {url}\n\n{text}"
-            return content, f"youtube/{video_id}"
-        else:
-            errors.append("yt-dlp: returned empty transcript")
-    except Exception as e:
-        errors.append(f"yt-dlp: {e}")
-        log.warning("yt-dlp transcript failed for %s: %s", video_id, e)
+        transcript = client.youtube.transcript(video_id=video_id, text=True)
+    except SupadataError as e:
+        raise RuntimeError(
+            f"Supadata failed to fetch transcript for {url}: {e}"
+        ) from e
 
-    # ── Attempt 2: YoutubeLoader / youtube_transcript_api (local/residential) ─
-    try:
-        from langchain_community.document_loaders import YoutubeLoader
-        loader = YoutubeLoader.from_youtube_url(url, add_video_info=False, language=["en", "en-US"])
-        docs = loader.load()
-        text = " ".join(d.page_content for d in docs)
-        if text.strip():
-            content = f"# YouTube Transcript\n\nSource: {url}\n\n{text}"
-            return content, f"youtube/{video_id}"
-        else:
-            errors.append("YoutubeLoader: returned empty transcript")
-    except Exception as e:
-        errors.append(f"YoutubeLoader: {e}")
-        log.warning("YoutubeLoader transcript failed for %s: %s", video_id, e)
+    text = transcript.content if hasattr(transcript, "content") else None
+    if not text:
+        raise RuntimeError(f"Supadata returned empty transcript for {url}")
 
-    # All transcript methods failed — raise with details so the job is marked failed
-    # (gives the caller a chance to surface the real error rather than silently returning empty)
-    error_summary = " | ".join(errors)
-    raise RuntimeError(
-        f"Could not fetch transcript for YouTube video {url}. "
-        f"Errors: {error_summary}"
-    )
+    content = f"# YouTube Transcript\n\nSource: {url}\n\n{text}"
+    return content, f"youtube/{video_id}"
 
 
 # ── JS-rendered docs fallback ─────────────────────────────────────────────────
@@ -172,179 +158,6 @@ def _read_js_doc(url: str) -> str:
                 pass
 
     return "\n\n".join(parts)
-
-
-# ── yt-dlp transcript helper ─────────────────────────────────────────────────
-
-def _fetch_ytdlp_transcript(video_id: str, url: str) -> str | None:
-    """Extract transcript/subtitles using yt-dlp.
-
-    yt-dlp mimics a real browser client and works from cloud IPs where
-    youtube_transcript_api gets blocked. Tries manual captions first,
-    then auto-generated ones.
-    """
-    import io
-    import yt_dlp
-
-    transcript_lines: list[str] = []
-
-    class _SubtitleLogger:
-        def debug(self, msg: str) -> None: pass
-        def warning(self, msg: str) -> None: pass
-        def error(self, msg: str) -> None: pass
-
-    def _subtitle_hook(d: dict) -> None:
-        pass
-
-    import os
-    cookies_file = os.getenv("YOUTUBE_COOKIES_FILE", "")
-
-    ydl_opts: dict = {
-        "skip_download": True,
-        "writesubtitles": True,
-        "writeautomaticsub": True,
-        "subtitleslangs": ["en", "en-US", "en-GB"],
-        "subtitlesformat": "vtt",
-        "quiet": True,
-        "no_warnings": True,
-        "logger": _SubtitleLogger(),
-        "progress_hooks": [_subtitle_hook],
-        "outtmpl": "/tmp/yt_%(id)s.%(ext)s",
-    }
-    if cookies_file and Path(cookies_file).exists():
-        ydl_opts["cookiefile"] = cookies_file
-
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-        if not info:
-            return None
-
-        # Try to get subtitle data directly from info dict
-        subs = info.get("subtitles") or {}
-        auto_subs = info.get("automatic_captions") or {}
-
-        for lang in ["en", "en-US", "en-GB"]:
-            tracks = subs.get(lang) or auto_subs.get(lang, [])
-            # prefer VTT, then json3, then anything else
-            ordered = sorted(tracks, key=lambda t: (
-                0 if t.get("ext") == "vtt" else
-                1 if t.get("ext") == "json3" else 2
-            ))
-            for track in ordered:
-                sub_url = track.get("url")
-                ext = track.get("ext", "")
-                if not sub_url:
-                    continue
-                try:
-                    raw = httpx.get(sub_url, timeout=20).text
-                    if ext == "json3":
-                        lines = _parse_json3(raw)
-                    else:
-                        lines = _parse_vtt(raw)
-                    if lines:
-                        return " ".join(lines)
-                except Exception:
-                    continue
-
-    return None
-
-
-def _parse_json3(raw: str) -> list[str]:
-    """Extract plain text from YouTube's json3 subtitle format."""
-    import json as _json
-    seen: set[str] = set()
-    result: list[str] = []
-    try:
-        data = _json.loads(raw)
-        for event in data.get("events", []):
-            for seg in event.get("segs", []):
-                text = seg.get("utf8", "").strip()
-                if text and text not in ("\n", "") and text not in seen:
-                    # skip music/sound cues
-                    if text.startswith("[") and text.endswith("]"):
-                        continue
-                    seen.add(text)
-                    result.append(text)
-    except Exception:
-        pass
-    return result
-
-
-def _parse_vtt(vtt: str) -> list[str]:
-    """Extract plain text from a WebVTT subtitle string, deduplicating lines."""
-    seen: set[str] = set()
-    result: list[str] = []
-    for line in vtt.splitlines():
-        line = line.strip()
-        # Skip metadata lines
-        if (not line or line.startswith("WEBVTT") or line.startswith("NOTE")
-                or "-->" in line or re.match(r"^\d+$", line)
-                or line.startswith("Kind:") or line.startswith("Language:")):
-            continue
-        # Strip VTT inline tags like <00:00:00.000> or <c>
-        line = re.sub(r"<[^>]+>", "", line).strip()
-        # Decode HTML entities (&nbsp; etc.)
-        line = line.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
-        line = re.sub(r"\s+", " ", line).strip()
-        if line and line not in seen:
-            seen.add(line)
-            result.append(line)
-    return result
-
-
-# ── Supadata transcript helper ───────────────────────────────────────────────
-
-def _fetch_supadata_transcript(video_id: str) -> str | None:
-    """Fetch transcript via Supadata API — works from cloud IPs.
-
-    Free tier: https://supadata.ai  — set SUPADATA_API_KEY env var.
-    Without a key, still tries the unauthenticated endpoint (may be rate-limited).
-    """
-    import os
-    api_key = os.getenv("SUPADATA_API_KEY", "")
-    headers = {"x-api-key": api_key} if api_key else {}
-    resp = httpx.get(
-        "https://api.supadata.ai/v1/youtube/transcript",
-        params={"videoId": video_id, "text": "true"},
-        headers=headers,
-        timeout=30,
-        follow_redirects=True,
-    )
-    if resp.status_code != 200:
-        return None
-    data = resp.json()
-    # Response shape: {"content": "...", "lang": "en"} or {"transcript": [...]}
-    if isinstance(data, dict):
-        if "content" in data:
-            return str(data["content"])
-        if "transcript" in data:
-            return " ".join(t.get("text", "") for t in data["transcript"])
-    return None
-
-
-# ── YouTube API factory ───────────────────────────────────────────────────────
-
-def _youtube_api():
-    """Return a YouTubeTranscriptApi instance, using browser cookies if available.
-
-    Set YOUTUBE_COOKIES_FILE in .env to the path of a Netscape-format cookies.txt
-    exported from your browser (use the 'Get cookies.txt LOCALLY' Chrome extension).
-    This bypasses YouTube IP-based rate limiting.
-    """
-    import os
-    from youtube_transcript_api import YouTubeTranscriptApi
-
-    cookies_path = os.getenv("YOUTUBE_COOKIES_FILE", "")
-    if cookies_path and Path(cookies_path).exists():
-        import requests
-        from http.cookiejar import MozillaCookieJar
-        session = requests.Session()
-        cj = MozillaCookieJar()
-        cj.load(cookies_path, ignore_discard=True, ignore_expires=True)
-        session.cookies = cj  # type: ignore[assignment]
-        return YouTubeTranscriptApi(http_client=session)
-
-    return YouTubeTranscriptApi()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

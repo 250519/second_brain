@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { RefreshCw } from 'lucide-react'
+import { BASE_URL } from '../../api/client'
 
 export function GraphFrame() {
   const [key, setKey] = useState(0)
@@ -9,6 +10,8 @@ export function GraphFrame() {
     setLoading(true)
     setKey(k => k + 1)
   }, [])
+
+  const graphUrl = `${BASE_URL}/api/v1/graph/view`
 
   return (
     <div className="relative rounded-2xl overflow-hidden border border-white/[0.06] bg-surface-800 grain">
@@ -30,7 +33,7 @@ export function GraphFrame() {
         )}
         <iframe
           key={key}
-          src="/api/v1/graph/view"
+          src={graphUrl}
           className="w-full h-[550px] border-0"
           onLoad={() => setLoading(false)}
           title="Knowledge Graph"

@@ -6,12 +6,15 @@ Handles all source types: local files, article URLs, YouTube transcripts, JS-ren
 
 ```
 read_source(input)
-  ├── YouTube URL          → _read_youtube()        transcript via youtube-transcript-api
+  ├── YouTube URL          → _read_youtube()        transcript via Supadata SDK (SUPADATA_API_KEY)
   ├── Social media URL     → _read_social_post()    Jina.ai reader → DuckDuckGo fallback
   ├── Other https:// URL   → _fetch_url()
   │     └── < 300 chars?  → _read_js_doc()          DuckDuckGo site: search fallback
   └── Local file           → direct read / pypdf
 ```
+
+> **Why Supadata instead of youtube-transcript-api?**
+> Cloud provider IPs (AWS, GCP, Azure) are blocked by YouTube. `youtube-transcript-api` and `yt-dlp` both fail from cloud deployments even with cookies. Supadata is a third-party API that handles YouTube transcript fetching server-side — works reliably from any IP. Free tier available at https://supadata.ai
 
 ## Complete reader.py
 
@@ -105,7 +108,8 @@ def _is_youtube(url: str) -> bool:
 
 def _extract_video_id(url: str) -> str | None:
     if "youtu.be/" in url:
-        return url.split("youtu.be/")[1].split("?")[0]
+        match = re.search(r"youtu\.be/([A-Za-z0-9_-]{11})", url)
+        return match.group(1) if match else None
     parsed = urlparse(url)
     qs = parse_qs(parsed.query)
     ids = qs.get("v", [])
@@ -113,46 +117,36 @@ def _extract_video_id(url: str) -> str | None:
 
 
 def _read_youtube(url: str) -> tuple[str, str]:
-    """Fetch YouTube transcript. Uses cookies if YOUTUBE_COOKIES_FILE env var is set."""
-    from youtube_transcript_api import YouTubeTranscriptApi
+    """Fetch YouTube transcript via Supadata SDK.
+
+    Requires SUPADATA_API_KEY env var — sign up free at https://supadata.ai
+    Works from cloud IPs (AWS/GCP/Azure) where youtube-transcript-api is blocked.
+    """
+    import os
+    from supadata import Supadata, SupadataError
 
     video_id = _extract_video_id(url)
     if not video_id:
         raise ValueError(f"Could not extract video ID from: {url}")
 
-    time.sleep(2)  # be polite — avoid rate-limiting on sequential fetches
-    api = _youtube_api()
-    try:
-        transcript = api.fetch(video_id)
-    except Exception as e:
-        raise ValueError(f"Could not fetch transcript for {video_id}: {e}")
+    api_key = os.environ.get("SUPADATA_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("SUPADATA_API_KEY env var is not set")
 
-    text = " ".join(entry.text for entry in transcript)
-    text = re.sub(r"\[.*?\]", "", text)       # remove [Music], [Applause] etc.
-    text = re.sub(r"\s+", " ", text).strip()
+    client = Supadata(api_key=api_key)
+    try:
+        transcript = client.youtube.transcript(video_id=video_id, text=True)
+    except SupadataError as e:
+        raise RuntimeError(
+            f"Supadata failed to fetch transcript for {url}: {e}"
+        ) from e
+
+    text = transcript.content if hasattr(transcript, "content") else None
+    if not text:
+        raise RuntimeError(f"Supadata returned empty transcript for {url}")
 
     content = f"# YouTube Transcript\n\nSource: {url}\n\n{text}"
     return content, f"youtube/{video_id}"
-
-
-def _youtube_api():
-    """Return YouTubeTranscriptApi, optionally with browser cookies."""
-    import os
-    from youtube_transcript_api import YouTubeTranscriptApi
-
-    cookies_file = os.getenv("YOUTUBE_COOKIES_FILE")
-    if cookies_file and Path(cookies_file).exists():
-        try:
-            import http.cookiejar
-            import requests
-            jar = http.cookiejar.MozillaCookieJar(cookies_file)
-            jar.load(ignore_discard=True, ignore_expires=True)
-            session = requests.Session()
-            session.cookies = jar  # type: ignore[assignment]
-            return YouTubeTranscriptApi(http_client=session)
-        except Exception:
-            pass
-    return YouTubeTranscriptApi()
 
 
 # ── URL fetching ──────────────────────────────────────────────────────────────
@@ -236,7 +230,7 @@ second-brain ingest "https://x.com/user/status/..."
 second-brain ingest "https://reddit.com/r/MachineLearning/comments/..."
 second-brain ingest "https://threads.net/@user/post/..."
 
-# YouTube (transcript)
+# YouTube (transcript via Supadata — requires SUPADATA_API_KEY)
 second-brain ingest "https://youtu.be/abc123"
 
 # Articles / docs
@@ -247,8 +241,18 @@ second-brain ingest data/raw/paper.pdf
 second-brain ingest data/raw/notes.md
 ```
 
+## Required env vars
+
+| Var | Purpose |
+|---|---|
+| `SUPADATA_API_KEY` | YouTube transcript fetching — sign up free at https://supadata.ai |
+
 ## How Jina.ai works
 
 `https://r.jina.ai/{url}` — Jina spins up a headless browser, renders the page, and returns clean markdown. Free, no API key needed for personal use. Returns 10k–30k chars for most public social media posts.
 
 **Limitation:** Private posts or posts requiring login return limited content even through Jina. In that case the DuckDuckGo fallback tries to find cached/shared versions of the content.
+
+## Why NOT youtube-transcript-api or yt-dlp
+
+Both are blocked by YouTube on cloud IPs (AWS/GCP/Azure). Even valid browser cookies don't help — YouTube now requires a BotGuard "Proof of Origin Token" that can only be generated by a real browser running JavaScript. Supadata handles this server-side.

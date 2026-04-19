@@ -123,7 +123,7 @@ touch src/<package>/__init__.py src/<package>/agents/__init__.py
 touch src/<package>/api/__init__.py src/<package>/api/routers/__init__.py
 
 uv add openai python-dotenv click httpx html2text pypdf \
-        youtube-transcript-api "duckduckgo-search>=6.0" \
+        "supadata>=0.1" "duckduckgo-search>=6.0" \
         "rank-bm25>=0.2" "networkx>=3.0" pyvis \
         "fastapi>=0.100" "uvicorn[standard]>=0.20" python-multipart
 ```
@@ -139,6 +139,7 @@ uv add openai python-dotenv click httpx html2text pypdf \
 TFY_API_KEY=<your-api-key>
 TFY_BASE_URL=https://your-gateway/api/llm
 DEFAULT_MODEL=your-model-id
+SUPADATA_API_KEY=<your-supadata-api-key>   # required for YouTube — sign up free at https://supadata.ai
 ```
 
 **→ Read `references/core-modules.md` for complete `config.py`, `llm.py`, `wiki.py`, `search.py`**
@@ -153,7 +154,8 @@ Handles local files + 3 URL types with automatic fallback:
 |---|---|
 | `.txt`, `.md` | Direct read |
 | `.pdf` | `pypdf.PdfReader` |
-| YouTube URL | `YouTubeTranscriptApi().fetch(video_id)` — **instance method** in v1.x |
+| YouTube URL | Supadata SDK (`SUPADATA_API_KEY`) — works from cloud IPs; `youtube-transcript-api` and `yt-dlp` are blocked by YouTube on AWS/GCP/Azure |
+| Social media URL | Jina.ai reader (`r.jina.ai/{url}`) → DuckDuckGo fallback |
 | Article URL | `httpx` + `html2text` |
 | JS-rendered docs | Detect if < 300 chars → DuckDuckGo `site:` search → fetch real sub-pages |
 
@@ -325,7 +327,9 @@ GET  /health                      → liveness
 |---|---|
 | Compiler loop breaks on long responses | Use `if not choice.message.tool_calls: break`, not `finish_reason` |
 | Query returns "no pages found" despite full wiki | Strip `wiki/` prefix from paths; use `relative_to(WIKI_DIR)` not `WIKI_DIR.parent` |
-| YouTube transcripts fail with AttributeError | Use `YouTubeTranscriptApi().fetch(video_id)` (instance, v1.x), not class method |
+| YouTube transcripts fail on cloud (bot detection / "Sign in") | Use Supadata SDK — YouTube blocks `youtube-transcript-api` and `yt-dlp` on cloud IPs (AWS/GCP/Azure) even with valid cookies. Set `SUPADATA_API_KEY`. |
+| Wiki data disappears after container restart | Container filesystem is ephemeral. Mount a persistent volume at `/app/data` using TrueFoundry `VolumeMount` (storage class `efs-sc`). |
+| Knowledge graph iframe blank in deployed frontend | iframe `src="/api/v1/graph/view"` resolves against the frontend host, not the backend. Use absolute URL from `VITE_API_URL` baked at build time. |
 | f-string backslash SyntaxError (Python < 3.12) | `"---\n".join(parts)` outside the f-string |
 | Empty .md files appear in wiki root | Obsidian placeholders — skip `p.parent == WIKI_DIR` and empty files in `read_all_pages()` |
 | Duplicate concept pages accumulate | Add to SYSTEM: "check the index first — update existing pages, never create a duplicate" |
